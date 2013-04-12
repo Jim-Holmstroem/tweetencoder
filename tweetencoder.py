@@ -3,6 +3,8 @@ from __future__ import print_function
 import string
 import Image, ImageDraw #NOTE requires PIL version of >=1.1.6 
                         #for draw.line(,width) to work properly
+import cairo
+
 import itertools as it
 import functools as ft
 
@@ -33,14 +35,21 @@ resulting image: 256x256
 """
 
 WIDTH, HEIGHT = 256, 256
-BGCOLOR = (0,0,0,1)
+BGCOLOR = (0,0,0,0)
 
 #http://upload.wikimedia.org/wikipedia/commons/d/df/EGA_Table.PNG
 colors = dict(enumerate( #not in order but unique
-    map(lambda cc: "#{hexc}".format(
-        hexc=''.join(cc)
-        ),
-        it.product(["0","5","A","F"], repeat=3)
+    map(
+        lambda rgb: rgb+(0.5,),
+        it.product(
+            [
+                float(0x00)/0xFF, 
+                float(0x55)/0xFF, 
+                float(0xAA)/0xFF, 
+                float(0xFF)/0xFF
+            ], 
+            repeat=3
+        )
     )
 ))
 
@@ -65,9 +74,10 @@ def binarray2int(binarray):
 
 def renderImage(dna):
     renderDNA(dna)
-    img = Image.new('RGBA', (WIDTH, HEIGHT), BGCOLOR) #blank image
-    draw = ImageDraw.Draw(img)
-    def renderLine(draw, line):
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
+    ctx = cairo.Context(surface)
+
+    def renderLine(ctx, line):
         if(line[-1] is not None): #if not padding
             colorId, xa, ya, xb, yb, width = map(
                 binarray2int,
@@ -76,27 +86,24 @@ def renderImage(dna):
                     line
                 )
             )
-            draw.line(
-                [
-                    (grid[xa], grid[ya]),
-                    (grid[xb], grid[yb])
-                ],
-                width=grid[width],
-                fill=colors[colorId]
-            )
+            ctx.move_to(grid[xa], grid[ya])
+            ctx.line_to(grid[xb], grid[yb])
+            ctx.set_source_rgba(*colors[colorId])
+            ctx.set_line_width(grid[width])
+            ctx.stroke()
 
     list(map(
         ft.partial(
             renderLine, 
-            draw
+            ctx
         ),
         grouper(
             36, 
             dna
         )
     ))
-    del draw
-    return img
+    surface.write_to_png("tmp/tmp.png")
+    return surface
 
 def renderDNA(dna):
     def renderLine(line):
