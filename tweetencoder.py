@@ -1,9 +1,12 @@
+from __future__ import print_function
 
 import string
 import Image, ImageDraw #NOTE requires PIL version of >=1.1.6 
                         #for draw.line(,width) to work properly
 import itertools as it
 import functools as ft
+
+import random
 
 """
     encode(and decode) an image with 140 ascii printable characters(32-126) i.e a tweet
@@ -29,22 +32,20 @@ resulting image: 256x256
 
 """
 
+WIDTH, HEIGHT = 256, 256
+BGCOLOR = (0,0,0,1)
 
-def hexs2rgba(hexcolors):
-    """
-    http://upload.wikimedia.org/wikipedia/commons/d/df/EGA_Table.PNG
-    """
-    rgb = tuple(map(
-        lambda c: int(c, 16)/255.0,
-        hexcolors
-    ))
-    return rgb+(1.0,) 
-
-colors = dict(enumerate(
-    map(
-        hexs2rgba, #not in the right order
-        it.product(["00","55","AA","FF"], repeat=3)
+#http://upload.wikimedia.org/wikipedia/commons/d/df/EGA_Table.PNG
+colors = dict(enumerate( #not in order but unique
+    map(lambda cc: "#{hexc}".format(
+        hexc=''.join(cc)
+        ),
+        it.product(["0","5","A","F"], repeat=3)
     )
+))
+
+grid = dict(enumerate(
+    range(2,256,4)
 ))
 
 def grouper(n, iterable, fillvalue=None):
@@ -62,10 +63,58 @@ def binarray2int(binarray):
         2
     )
 
-def render_image(bindata):
-    img = Image.new('RGBA', (100, 100), (0,0,0,0)) #blank image
+def renderImage(dna):
+    renderDNA(dna)
+    img = Image.new('RGBA', (WIDTH, HEIGHT), BGCOLOR) #blank image
     draw = ImageDraw.Draw(img)
-    def render_line(draw, line):
-        draw.line(fill=colors
+    def renderLine(draw, line):
+        if(line[-1] is not None): #if not padding
+            colorId, xa, ya, xb, yb, width = map(
+                binarray2int,
+                grouper(
+                    6, 
+                    line
+                )
+            )
+            draw.line(
+                [
+                    (grid[xa], grid[ya]),
+                    (grid[xb], grid[yb])
+                ],
+                width=grid[width],
+                fill=colors[colorId]
+            )
 
-    map(ft.partial(render_line, draw), grouper(6, bindata))
+    list(map(
+        ft.partial(
+            renderLine, 
+            draw
+        ),
+        grouper(
+            36, 
+            dna
+        )
+    ))
+    del draw
+    return img
+
+def renderDNA(dna):
+    def renderLine(line):
+        def renderData(data):
+            return ''.join(map(str, data))
+        return ' '.join(map(renderData,grouper(6, line)))
+    list(map(print, 
+        map(
+            renderLine, 
+            filter(lambda row: row[-1] is not None,
+                grouper(6*6, dna)
+            )
+        )
+    ))
+
+def rndmDNA(length=912):
+    def rndmBool(dummy=None):
+        return random.randint(0,1)
+    return map(rndmBool, range(length)) 
+
+
