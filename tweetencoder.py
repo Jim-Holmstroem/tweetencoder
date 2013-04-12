@@ -1,6 +1,8 @@
 from __future__ import print_function
 
 import string
+from copy import copy
+
 import cairo
 
 import itertools as it
@@ -105,7 +107,7 @@ def renderImage(dna):
             dna
         )
     ))
-    #surface.write_to_png("tmp/tmp.png")
+    surface.write_to_png("tmp/tmp.png")
     return surface
 
 surfaceTrain = cairo.ImageSurface.create_from_png("training.png")
@@ -155,9 +157,32 @@ def mutateOrder(dna):
     nonLineGens = filter(lambda gen: gen[-1] is None, gens)
     lineGens = filter(lambda gen: gen[-1] is not None, gens)
     swapIndexA, swapIndexB = random.sample(range(len(lineGens)), 2)
-    print(swapIndexA, swapIndexB)
     lineGens[swapIndexB], lineGens[swapIndexA] = lineGens[swapIndexA], lineGens[swapIndexB] #a bit unpure
     return list(it.chain(*(lineGens+nonLineGens)))
 
+def mutate(dna):
+    index = random.sample(len(filter(bool, dna)))[0]
+    dnap = copy(dna)
+    dnap[index] = int(not dnap[index])
+    return dnap
+
+def crossover(dna, dnb):
+    """crossovers 1-4 time(s) doesn't modify dna,dnb"""
+    assert(len(dna)==len(dnb))
+    indeces = random.sample(
+        range(len(filter(bool,dna))),
+        random.randint(1, 4)
+    )
+    def crossoverAt(dna, dnb, ats):
+        """``ats'' is a list of indices to crossover, has modifies input"""
+        if(len(ats)):
+            at=ats[0]
+            swp = dna[at:]
+            dna[at:] = dnb[at:]
+            dnb[at:] = swp
+            return crossoverAt(dna, dnb, list(it.islice(ats, 1, None)))
+        else:
+            return dna, dnb
+    return crossoverAt(copy(dna), copy(dnb), indeces)
 
 
