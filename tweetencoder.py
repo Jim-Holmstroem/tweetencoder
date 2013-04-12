@@ -1,14 +1,15 @@
 from __future__ import print_function
 
 import string
-import Image, ImageDraw #NOTE requires PIL version of >=1.1.6 
-                        #for draw.line(,width) to work properly
 import cairo
 
 import itertools as it
 import functools as ft
 
 import random
+
+import numpy as np
+
 
 """
     encode(and decode) an image with 140 ascii printable characters(32-126) i.e a tweet
@@ -30,17 +31,19 @@ language definition: 1tweet = 152word (word=6bit) = 25lines+4bit = 912bit
     yb = 6bit \in range(2,256,4)
     width = 6bit \in range(2,256,4)
 
+    #the junk-dna (i.e the offset) is always last and can be threaded as such.
 resulting image: 256x256
 
 """
 
-WIDTH, HEIGHT = 256, 256
+WIDTH = 256
+HEIGHT= WIDTH
 BGCOLOR = (0,0,0,0)
 
 #http://upload.wikimedia.org/wikipedia/commons/d/df/EGA_Table.PNG
 colors = dict(enumerate( #not in order but unique
     map(
-        lambda rgb: rgb+(0.5,),
+        lambda rgb: rgb+(0.9,),
         it.product(
             [
                 float(0x00)/0xFF, 
@@ -54,7 +57,7 @@ colors = dict(enumerate( #not in order but unique
 ))
 
 grid = dict(enumerate(
-    range(2,256,4)
+    range(2,WIDTH,4)
 ))
 
 def grouper(n, iterable, fillvalue=None):
@@ -73,7 +76,7 @@ def binarray2int(binarray):
     )
 
 def renderImage(dna):
-    renderDNA(dna)
+    #renderDNA(dna)
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
     ctx = cairo.Context(surface)
 
@@ -102,8 +105,31 @@ def renderImage(dna):
             dna
         )
     ))
-    surface.write_to_png("tmp/tmp.png")
+    #surface.write_to_png("tmp/tmp.png")
     return surface
+
+surfaceTrain = cairo.ImageSurface.create_from_png("training.png")
+
+def imagesurface2tensor(imgsurface):
+    return (
+        np.cast['float64'](
+            np.frombuffer(
+                imgsurface.get_data(), 
+                dtype=np.uint8
+            )
+        )/255.0
+    ).reshape(
+        imgsurface.get_width(), 
+        imgsurface.get_height(),
+        len("RGBA")
+    )
+
+def fitness2ref(refsurface, imgsurface):
+    ref, img = map(imagesurface2tensor, [refsurface, imgsurface])
+    sdiff = np.square(ref-img)
+    return np.add.reduce(np.add.reduce(np.add.reduce(sdiff))) #if np.version>=1.7.1 => np.add.reduce(sdiff, axis=(0,1,2))
+
+fitnessDNA = ft.partial(fitness2ref, surfaceTrain)
 
 def renderDNA(dna):
     def renderLine(line):
@@ -123,5 +149,15 @@ def rndmDNA(length=912):
     def rndmBool(dummy=None):
         return random.randint(0,1)
     return map(rndmBool, range(length)) 
+
+def mutateOrder(dna):
+    gens = list(grouper(6*6, dna))
+    nonLineGens = filter(lambda gen: gen[-1] is None, gens)
+    lineGens = filter(lambda gen: gen[-1] is not None, gens)
+    swapIndexA, swapIndexB = random.sample(range(len(lineGens)), 2)
+    print(swapIndexA, swapIndexB)
+    lineGens[swapIndexB], lineGens[swapIndexA] = lineGens[swapIndexA], lineGens[swapIndexB] #a bit unpure
+    return list(it.chain(*(lineGens+nonLineGens)))
+
 
 
