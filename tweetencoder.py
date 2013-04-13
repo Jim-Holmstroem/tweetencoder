@@ -7,6 +7,7 @@ import cairo
 
 import itertools as it
 import functools as ft
+import operator as op
 
 import random
 
@@ -40,7 +41,15 @@ resulting image: 256x256
 
 WIDTH = 256
 HEIGHT= WIDTH
-BGCOLOR = (0,0,0,0)
+BGCOLOR = (0, 0, 0, 0)
+START_POPULATION = 32
+MUTATION_RATE = 1.0/1024
+
+def composition(f, *g):
+    if(g):
+        return lambda *x: f(composition(*g)(*x))
+    else:
+        return f
 
 #http://upload.wikimedia.org/wikipedia/commons/d/df/EGA_Table.PNG
 colors = dict(enumerate( #not in order but unique
@@ -58,8 +67,19 @@ colors = dict(enumerate( #not in order but unique
     )
 ))
 
+class DNA(object):
+    def __init__(self, data=None):
+        self.__fitness = None
+        if(data is None):
+            self.data = rndmDNA()
+        else:
+            self.data = data
+    def fitness(self):
+        if(self.__fitness is None):
+            self.__fitness = fitnessDNA(self.data)
+        return self.__fitness
 grid = dict(enumerate(
-    range(2,WIDTH,4)
+    range(2, WIDTH, 4)
 ))
 
 def grouper(n, iterable, fillvalue=None):
@@ -129,11 +149,12 @@ def imagesurface2tensor(imgsurface):
 def fitness2ref(refsurface, imgsurface):
     ref, img = map(imagesurface2tensor, [refsurface, imgsurface])
     sdiff = np.square(ref-img)
-    return np.add.reduce(np.add.reduce(np.add.reduce(sdiff))) #if np.version>=1.7.1 => np.add.reduce(sdiff, axis=(0,1,2))
+    return -np.add.reduce(sdiff, axis=(0,1,2))
 
-fitnessDNA = ft.partial(fitness2ref, surfaceTrain)
+fitnessDNA = composition(ft.partial(fitness2ref, surfaceTrain), renderImage)
 
 def renderDNA(dna):
+    print("DNA{")
     def renderLine(line):
         def renderData(data):
             return ''.join(map(str, data))
@@ -141,11 +162,13 @@ def renderDNA(dna):
     list(map(print, 
         map(
             renderLine, 
-            filter(lambda row: row[-1] is not None,
-                grouper(6*6, dna)
-            )
+            grouper(6*6, dna)
         )
     ))
+    print("}") 
+
+def rndmFilename():
+    return '{}.png'.format(''.join(random.sample(string.letters, 16)))
 
 def rndmDNA(length=912):
     def rndmBool(dummy=None):
@@ -161,7 +184,7 @@ def mutateOrder(dna):
     return list(it.chain(*(lineGens+nonLineGens)))
 
 def mutate(dna):
-    index = random.sample(len(filter(bool, dna)))[0]
+    index = random.randrange(len(filter(lambda x: x is not None, dna)))
     dnap = copy(dna)
     dnap[index] = int(not dnap[index])
     return dnap
@@ -170,7 +193,7 @@ def crossover(dna, dnb):
     """crossovers 1-4 time(s) doesn't modify dna,dnb"""
     assert(len(dna)==len(dnb))
     indeces = random.sample(
-        range(len(filter(bool,dna))),
+        range(len(filter(lambda x: x is not None,dna))),
         random.randint(1, 4)
     )
     def crossoverAt(dna, dnb, ats):
@@ -184,5 +207,53 @@ def crossover(dna, dnb):
         else:
             return dna, dnb
     return crossoverAt(copy(dna), copy(dnb), indeces)
+    
+def evaluate(population, p0 = 1.0/START_POPULATION):
+    #replot distribution
+    rawValue = np.array(map(fitnessDNA, population))
+    value = rawValue/rawValue.sum()
+    valueBaseline = value + p0
+    return valueBaseline/valueBaseline.sum()
 
+def combat4(combatants):
+    """combat and procreate and die etc"""
+    assert(len(combatants)==4)
+    winnerA, winnerB, loserA, loserB = combatants
+    return winnerA, winnerB, crossover(winnerA, winnerB), crossover(winnerA, winnerB)
+
+def life(population):
+    """maintains polpulation size, inplace life"""
+    fitnesses = evaluate(population)
+    chosenIndexs = np.random.choice(
+        range(len(population)), 
+        4, 
+        replace=False, 
+        p=fitnesses
+    )
+    after = combat4(op.itemgetter(*chosenIndexs)(population)) 
+    #a bit ugly, but I think it's the easiest way to do this
+    #for i,j  in enumerate(chosenIndexs):
+    #    population[j] = after[i] #put them back
+
+    #mutations
+    for i in range(len(population)):
+        if(np.random.random()<MUTATION_RATE/2):
+            print('mutate')
+            i = random.randrange(len(population))
+            population[i] = mutate(population[i])
+    #for i in range(len(population)):
+    #    if(np.random.random()<MUTATION_RATE/2):
+    #        print('mutateOrder')
+    #        i = random.randrange(len(population))
+    #        population[i] = mutateOrder(population[i])
+
+population = [rndmDNA() for i in range(START_POPULATION)]
+#print(map(len, population))
+#map(mutateOrder, population)
+#print(map(len, population))
+generation = 0
+while True:
+    life(population)
+    generation+=1
+    print(generation)
 
