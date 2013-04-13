@@ -35,7 +35,7 @@ language definition: 1tweet = 152word (word=6bit) = 25lines+4bit = 912bit
     width = 6bit \in range(2,256,4)
 
     #the junk-dna (i.e the offset) is always last and can be threaded as such.
-resulting image: 256x256
+resujlting image: 256x256
 
 """
 
@@ -44,6 +44,7 @@ HEIGHT= WIDTH
 BGCOLOR = (0, 0, 0, 0)
 START_POPULATION = 32
 MUTATION_RATE = 1.0/1024
+DNA_LENGTH = 912
 
 def composition(f, *g):
     if(g):
@@ -67,6 +68,50 @@ colors = dict(enumerate( #not in order but unique
     )
 ))
 
+def baseChange(a, bfrom, bto):
+    """lowest first"""
+    value = sum(
+        map(
+            lambda (n, v): v*(bfrom**n),
+            enumerate(a)
+        )
+    )
+    if value==0:
+        return [0]
+    n = 1
+    answer = []
+    while value!=0:
+        v = value%(bto**n)
+        value-=v
+        answer.append(v//(bto**(n-1)))
+        n+=1
+    return answer
+
+def dna2tweet(dna):
+    """ change base from 2->94 then convert to ascii"""
+    return ''.join(
+        map(
+            lambda t: unichr(32+t),
+            baseChange(
+                filter(lambda x: x is not None, dna), 
+                2, 
+                94
+            )
+        )
+    )
+
+def tweet2dna(tweet):
+    dna = baseChange(
+        map(
+            lambda t: ord(t)-32,
+            tweet
+        ),
+        94,
+        2
+    )
+    assert(len(dna)<=DNA_LENGTH)
+    return dna+[0]*(DNA_LENGTH-len(dna))
+
 class DNA(object):
     def __init__(self, data=None):
         self.__fitness = None
@@ -74,10 +119,18 @@ class DNA(object):
             self.data = rndmDNA()
         else:
             self.data = data
+
     def fitness(self):
         if(self.__fitness is None):
             self.__fitness = fitnessDNA(self.data)
         return self.__fitness
+
+    def image(self):
+        pass
+
+    def tweet(self):
+        pass
+
 grid = dict(enumerate(
     range(2, WIDTH, 4)
 ))
@@ -98,7 +151,6 @@ def binarray2int(binarray):
     )
 
 def renderImage(dna):
-    #renderDNA(dna)
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
     ctx = cairo.Context(surface)
 
@@ -170,7 +222,7 @@ def renderDNA(dna):
 def rndmFilename():
     return '{}.png'.format(''.join(random.sample(string.letters, 16)))
 
-def rndmDNA(length=912):
+def rndmDNA(length=DNA_LENGTH):
     def rndmBool(dummy=None):
         return random.randint(0,1)
     return map(rndmBool, range(length)) 
@@ -219,6 +271,7 @@ def combat4(combatants):
     """combat and procreate and die etc"""
     assert(len(combatants)==4)
     winnerA, winnerB, loserA, loserB = combatants
+    print('TODO combat4')
     return winnerA, winnerB, crossover(winnerA, winnerB), crossover(winnerA, winnerB)
 
 def life(population):
