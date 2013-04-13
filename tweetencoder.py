@@ -112,25 +112,6 @@ def tweet2dna(tweet):
     assert(len(dna)<=DNA_LENGTH)
     return dna+[0]*(DNA_LENGTH-len(dna))
 
-class DNA(object):
-    def __init__(self, data=None):
-        self.__fitness = None
-        if(data is None):
-            self.data = rndmDNA()
-        else:
-            self.data = data
-
-    def fitness(self):
-        if(self.__fitness is None):
-            self.__fitness = fitnessDNA(self.data)
-        return self.__fitness
-
-    def image(self):
-        pass
-
-    def tweet(self):
-        pass
-
 grid = dict(enumerate(
     range(2, WIDTH, 4)
 ))
@@ -266,6 +247,34 @@ def evaluate(population, p0 = 1.0/START_POPULATION):
     value = rawValue/rawValue.sum()
     valueBaseline = value + p0
     return valueBaseline/valueBaseline.sum()
+
+class DNA(object):
+    def __init__(self, data=None):
+        self.__fitness = None
+        self.__image = None
+        self.__tweet = None
+        if(data is None):
+            self.data = rndmDNA()
+        else:
+            self.data = data
+
+    def fitness(self):
+        if self.__fitness is None:
+            self.__fitness = fitness2ref(
+                surfaceTrain,
+                self.image()
+            )
+        return self.__fitness
+
+    def image(self):
+        if self.__image is None:
+            self.__image = renderImage(self.data) 
+        return self.__image
+
+    def tweet(self):
+        if self.__tweet is None:
+            self.__tweet = dna2tweet(self.data)
+        return self.__tweet 
 
 def combat4(combatants):
     """combat and procreate and die etc"""
