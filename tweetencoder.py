@@ -46,7 +46,7 @@ WIDTH = 256
 HEIGHT= WIDTH
 BGCOLOR = (0, 0, 0, 0)
 START_POPULATION = 1024
-MUTATION_RATE = 1.0/1024
+MUTATION_RATE = 1.0/128
 DNA_LENGTH = 912
 
 def composition(f, *g):
@@ -184,13 +184,12 @@ def imagesurface2tensor(imgsurface):
 def fitness2ref(refsurface, imgsurface):
     ref, img = map(imagesurface2tensor, [refsurface, imgsurface])
     sdiff = np.square(ref-img)
-    return math.log(1+np.add.reduce(sdiff, axis=(0,1,2)))
+    return sdiff.size - np.add.reduce(sdiff, axis=(0,1,2))
 
 fitnessDNA = composition(ft.partial(fitness2ref, surfaceTrain), renderImage)
 
 def rndmFilename():
     return '{}.png'.format(''.join(random.sample(string.letters, 16)))
-
 
 def mutateOrder(dna):
     gens = list(grouper(6*6, dna.data))
@@ -237,7 +236,8 @@ def crossover(dna, dnb):
             return crossoverAt(dna, dnb, list(it.islice(ats, 1, None)))
         else:
             return dna, dnb
-    return map(
+
+    offsprings = map(
         DNA, 
         crossoverAt(
             copy(dna.data), 
@@ -245,10 +245,21 @@ def crossover(dna, dnb):
             indeces
         )
     )
-    
-def evaluate(population, p0 = 0.0/START_POPULATION):
+    for offspring in offsprings: 
+        if(np.random.random()<MUTATION_RATE/2):
+            print('mutate')
+            offspring = mutate(offspring)
+        if(np.random.random()<MUTATION_RATE/2):
+            print('mutateOrder')
+            offspring = mutateOrder(offspring)
+
+    return offsprings
+
+def evaluate(population, raw=False, p0 = 0.0/START_POPULATION):
     #replot distribution
     rawValue = np.array(map(op.methodcaller('fitness'), population))
+    if raw:
+        return rawValue
     value = rawValue/rawValue.sum()
     valueBaseline = value + p0
     return valueBaseline/valueBaseline.sum()
@@ -306,7 +317,7 @@ class DNA(object):
 def combat4(combatants):
     """combat and procreate and die etc"""
     assert(len(combatants)==4)
-    winnerA, winnerB, loserA, loserB = sorted(combatants, key=op.methodcaller('fitness'))
+    winnerA, winnerB, loserA, loserB = sorted(combatants, key=op.methodcaller('fitness'), reverse=True)
     children = crossover(winnerA, winnerB)
     return winnerA, winnerB, children[0], children[1] 
 
@@ -324,22 +335,12 @@ def life(population):
     for i,j  in enumerate(chosenIndexs):
         population[j] = after[i] #put them back
 
-    #mutations
-    for i in range(len(population)):
-        if(np.random.random()<MUTATION_RATE/2):
-            print('mutate')
-            population[i] = mutate(population[i])
-    for i in range(len(population)):
-        if(np.random.random()<MUTATION_RATE/2):
-            print('mutateOrder')
-            population[i] = mutateOrder(population[i])
-
 population = [DNA() for i in range(START_POPULATION)]
 generation = 0
 
 pl.ion()
 
-startvalues = evaluate(population)
+startvalues = evaluate(population, raw=True)
 startvalues.sort()
 plotline, = pl.plot(startvalues) 
 
@@ -350,16 +351,18 @@ while True:
             np.argmax(
                 np.array(
                     evaluate(
-                        population
+                        population,
+                        raw=True
                     )
                 )
             )
         ].image().write_to_png(
             'tmp/best{}.png'.format(generation)
         )
-    values = evaluate(population)
+    values = evaluate(population, raw=True)
     values.sort()
     plotline.set_ydata(values)
+    pl.ylim(values[0], values[-1])
     pl.draw()
     generation+=1
     print(generation)
