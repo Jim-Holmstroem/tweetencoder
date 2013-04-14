@@ -12,6 +12,9 @@ import operator as op
 import random
 
 import numpy as np
+import pylab as pl
+import math
+
 
 
 """
@@ -43,7 +46,7 @@ WIDTH = 256
 HEIGHT= WIDTH
 BGCOLOR = (0, 0, 0, 0)
 START_POPULATION = 1024
-MUTATION_RATE = 10.0/1024
+MUTATION_RATE = 1.0/1024
 DNA_LENGTH = 912
 
 def composition(f, *g):
@@ -55,7 +58,7 @@ def composition(f, *g):
 #http://upload.wikimedia.org/wikipedia/commons/d/df/EGA_Table.PNG
 colors = dict(enumerate( #not in order but unique
     map(
-        lambda rgb: rgb+(0.9,),
+        lambda rgb: rgb+(1.0,),
         it.product(
             [
                 float(0x00)/0xFF, 
@@ -181,25 +184,21 @@ def imagesurface2tensor(imgsurface):
 def fitness2ref(refsurface, imgsurface):
     ref, img = map(imagesurface2tensor, [refsurface, imgsurface])
     sdiff = np.square(ref-img)
-    return -np.add.reduce(sdiff, axis=(0,1,2))
+    return math.log(1+np.add.reduce(sdiff, axis=(0,1,2)))
 
 fitnessDNA = composition(ft.partial(fitness2ref, surfaceTrain), renderImage)
 
 def rndmFilename():
     return '{}.png'.format(''.join(random.sample(string.letters, 16)))
 
-def rndmDNA(length=DNA_LENGTH):
-    def rndmBool(dummy=None):
-        return random.randint(0,1)
-    return map(rndmBool, range(length)) 
 
-#def mutateOrder(dna):
-#    gens = list(grouper(6*6, dna))
-#    nonLineGens = filter(lambda gen: gen[-1] is None, gens)
-#    lineGens = filter(lambda gen: gen[-1] is not None, gens)
-#    swapIndexA, swapIndexB = random.sample(range(len(lineGens)), 2)
-#    lineGens[swapIndexB], lineGens[swapIndexA] = lineGens[swapIndexA], lineGens[swapIndexB] #a bit unpure
-#    return list(it.chain(*(lineGens+nonLineGens)))
+def mutateOrder(dna):
+    gens = list(grouper(6*6, dna.data))
+    nonLineGens = filter(lambda gen: gen[-1] is None, gens)
+    lineGens = filter(lambda gen: gen[-1] is not None, gens)
+    swapIndexA, swapIndexB = random.sample(range(len(lineGens)), 2)
+    lineGens[swapIndexB], lineGens[swapIndexA] = lineGens[swapIndexA], lineGens[swapIndexB] #a bit unpure
+    return DNA(filter(lambda x: x is not None, list(it.chain(*(lineGens+nonLineGens)))))
 
 def mutate(dna):
     index = random.randrange(DNA_LENGTH)
@@ -229,7 +228,7 @@ def crossover(dna, dnb):
         random.randint(1, 4)
     )
     def crossoverAt(dna, dnb, ats):
-        """``ats'' is a list of indices to crossover, modifies input"""
+        """``ats'' is a list of indices to crossover, modifies input, data only"""
         if(len(ats)):
             at=ats[0]
             swp = dna[at:]
@@ -238,9 +237,16 @@ def crossover(dna, dnb):
             return crossoverAt(dna, dnb, list(it.islice(ats, 1, None)))
         else:
             return dna, dnb
-    return map(DNA, crossoverAt(copy(dna.data), copy(dnb.data), indeces))
+    return map(
+        DNA, 
+        crossoverAt(
+            copy(dna.data), 
+            copy(dnb.data), 
+            indeces
+        )
+    )
     
-def evaluate(population, p0 = 1.0/START_POPULATION):
+def evaluate(population, p0 = 0.0/START_POPULATION):
     #replot distribution
     rawValue = np.array(map(op.methodcaller('fitness'), population))
     value = rawValue/rawValue.sum()
@@ -253,7 +259,10 @@ class DNA(object):
         self.__image = None
         self.__tweet = None
         if(data is None):
-            self.data = rndmDNA()
+            self.data = map(
+                lambda dummy: random.randint(0, 1), 
+                range(DNA_LENGTH)
+            ) 
         else:
             if(isinstance(data, basestring)):
                 self.data = tweet2dna(data)
@@ -320,16 +329,22 @@ def life(population):
         if(np.random.random()<MUTATION_RATE/2):
             print('mutate')
             population[i] = mutate(population[i])
-    #for i in range(len(population)):
-    #    if(np.random.random()<MUTATION_RATE/2):
-    #        print('mutateOrder')
-    #        population[i] = mutateOrder(population[i])
+    for i in range(len(population)):
+        if(np.random.random()<MUTATION_RATE/2):
+            print('mutateOrder')
+            population[i] = mutateOrder(population[i])
 
 population = [DNA() for i in range(START_POPULATION)]
 generation = 0
+
+pl.ion()
+
+startvalues = evaluate(population)
+startvalues.sort()
+plotline, = pl.plot(startvalues) 
+
 while True:
     life(population)
-
     if(generation%100==0):
         population[
             np.argmax(
@@ -342,7 +357,10 @@ while True:
         ].image().write_to_png(
             'tmp/best{}.png'.format(generation)
         )
-     
+    values = evaluate(population)
+    values.sort()
+    plotline.set_ydata(values)
+    pl.draw()
     generation+=1
     print(generation)
 
